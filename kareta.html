@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>الصحراء الجوزية - نسخة الأنيميشن الملامس والذخيرة</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; }
+
+        #loading-screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: #c4a484;
+        }
+        #loader-bar-container {
+            width: 250px;
+            height: 8px;
+            background: #333;
+            border-radius: 10px;
+            margin-top: 20px;
+            overflow: hidden;
+            border: 1px solid #444;
+        }
+        #loader-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ffcc33, #ffa500);
+            transition: width 0.4s ease;
+        }
+        h2 { letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+
+        #joystick-container {
+            position: absolute;
+            bottom: 50px;
+            left: 50px;
+            width: 120px;
+            height: 120px;
+            z-index: 10;
+        }
+
+        #fire-button {
+            position: absolute;
+            bottom: 60px;
+            right: 60px;
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 0, 0, 0.4);
+            border: 4px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            z-index: 20;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            touch-action: none;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+        }
+        #fire-button:active {
+            background: rgba(255, 0, 0, 0.8);
+            transform: scale(0.9);
+        }
+        #fire-button::after {
+            content: "🚀";
+            font-size: 40px;
+        }
+
+        #ammo-counter {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-size: 24px;
+            border: 2px solid #ffcc00;
+            font-weight: bold;
+            z-index: 30;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading-screen">
+    <h2>جاري تجهيز الأنظمة القتالية والذخيرة...</h2>
+    <div id="loader-bar-container">
+        <div id="loader-bar"></div>
+    </div>
+</div>
+
+<div id="ammo-counter">الذخيرة: <span id="ammo-count">5</span></div>
+<div id="joystick-container"></div>
+<div id="fire-button"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+
+<script>
+    /**
+     * 1. الإعدادات الأساسية والمشهد
+     */
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); 
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.0006); 
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    /**
+     * 2. نظام الإضاءة المحسن
+     */
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    hemiLight.position.set(0, 500, 0);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    sunLight.position.set(200, 500, 200);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.left = -1500;
+    sunLight.shadow.camera.right = 1500;
+    sunLight.shadow.camera.top = 1500;
+    sunLight.shadow.camera.bottom = -1500;
+    scene.add(sunLight);
+
+    /**
+     * 3. التضاريس
+     */
+    const worldSize = 3000; 
+    const segments = 1;
+    const boundary = (worldSize / 2) - 100;
+
+    const terrainGeo = new THREE.PlaneGeometry(worldSize, worldSize, segments, segments);
+    const terrainMat = new THREE.MeshStandardMaterial({ color: 0x3d5e20, roughness: 0.9, metalness: 0.05 });
+    const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+    terrain.rotation.x = -Math.PI / 2;
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    /**
+     * 4. الطريق
+     */
+    function createRoadTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#333333'; 
+        ctx.fillRect(0, 0, 512, 1024);
+        ctx.fillStyle = '#ffcc00'; 
+        for(let i=0; i<1024; i+=100) { ctx.fillRect(245, i, 22, 50); }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, 80);
+        return tex;
+    }
+    const roadGeo = new THREE.PlaneGeometry(45, worldSize);
+    const roadMat = new THREE.MeshStandardMaterial({ map: createRoadTexture(), transparent: true, opacity: 0.9 });
+    const mainRoad = new THREE.Mesh(roadGeo, roadMat);
+    mainRoad.rotation.x = -Math.PI / 2;
+    mainRoad.position.y = 0.06; 
+    mainRoad.receiveShadow = true;
+    scene.add(mainRoad);
+
+    /**
+     * نظام السحب
+     */
+    function createRealisticClouds() {
+        const cloudGroup = new THREE.Group();
+        const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false });
+        for (let i = 0; i < 60; i++) {
+            const cluster = new THREE.Group();
+            const x = (Math.random() - 0.5) * worldSize * 1.5;
+            const z = (Math.random() - 0.5) * worldSize * 1.5;
+            const y = 350 + Math.random() * 150;
+            for (let j = 0; j < 6; j++) {
+                const size = 30 + Math.random() * 50;
+                const cloudPart = new THREE.Mesh(new THREE.SphereGeometry(size, 16, 12), cloudMat);
+                cloudPart.position.set(Math.random() * 100 - 50, Math.random() * 20 - 10, Math.random() * 100 - 50);
+                cloudPart.scale.set(1.5, 0.5, 1.2);
+                cluster.add(cloudPart);
+            }
+            cluster.position.set(x, y, z);
+            cluster.userData.speed = 0.05 + Math.random() * 0.1;
+            cloudGroup.add(cluster);
+        }
+        scene.add(cloudGroup);
+        return cloudGroup;
+    }
+    const clouds = createRealisticClouds();
+
+    /**
+     * 5. نظام التحميل والأعداء والأسلحة
+     */
+    const tentColliders = [];
+    const enemies = []; 
+    const weaponPickups = []; 
+    const rockets = []; 
+    const smokeParticles = []; 
+    let activeSecondaryWeapon = null; 
+    let installingWeapon = null; 
+    let rocketAmmo = 0; 
+
+    const ammoUI = document.getElementById('ammo-counter');
+    const ammoText = document.getElementById('ammo-count');
+    
+    const loadingManager = new THREE.LoadingManager();
+    const loaderBar = document.getElementById('loader-bar');
+    loadingManager.onProgress = (url, loaded, total) => { loaderBar.style.width = (loaded / total * 100) + '%'; };
+    loadingManager.onLoad = () => {
+        setTimeout(() => { 
+            document.getElementById('loading-screen').style.opacity = '0';
+            setTimeout(() => { document.getElementById('loading-screen').style.display = 'none'; }, 500);
+        }, 1000);
+    };
+
+    const loader = new THREE.GLTFLoader(loadingManager);
+
+    loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/plane.glb', (gltf) => {
+        const planeModel = gltf.scene;
+        planeModel.scale.set(10, 10, 10); 
+        const randomX = (Math.random() - 0.5) * (worldSize - 800);
+        const randomZ = (Math.random() - 0.5) * (worldSize - 800);
+        planeModel.position.set(randomX, 0.5, randomZ); 
+        planeModel.rotateY(Math.random() * Math.PI * 2);
+        planeModel.traverse(n => { if(n.isMesh) { n.castShadow = true; n.receiveShadow = true; }});
+        scene.add(planeModel);
+        tentColliders.push({ x: randomX, z: randomZ, radius: 25 });
+    });
+
+    loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/hi-v1.glb', (gltf) => {
+        const model = gltf.scene;
+        model.scale.set(7, 7, 7);
+        const tentPositions = [{x: 400, z: 600}, {x: -450, z: -300}, {x: 600, z: -800}, {x: -700, z: 800}, {x: 300, z: -1200}];
+        tentPositions.forEach(pos => {
+            const obj = model.clone();
+            obj.position.set(pos.x, 0, pos.z); 
+            obj.rotateY(Math.random() * Math.PI);
+            obj.traverse(n => { if(n.isMesh) { n.castShadow = true; n.receiveShadow = true; }});
+            scene.add(obj);
+            tentColliders.push({ x: pos.x, z: pos.z, radius: 20 });
+            enemies.push(obj); 
+        });
+    });
+
+    loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/tree.glb', (gltf) => {
+        const treeModel = gltf.scene;
+        treeModel.scale.set(12, 12, 12); 
+        for(let i=0; i<15; i++) {
+            const x = (Math.random() - 0.5) * (worldSize - 600);
+            const z = (Math.random() - 0.5) * (worldSize - 600);
+            if(Math.abs(x) < 60) continue; 
+            const treeClone = treeModel.clone();
+            treeClone.position.set(x, 0, z);
+            treeClone.rotateY(Math.random() * Math.PI);
+            treeClone.traverse(n => { if(n.isMesh) { n.castShadow = true; n.receiveShadow = true; }});
+            scene.add(treeClone);
+            tentColliders.push({ x: x, z: z, radius: 10 });
+        }
+    });
+
+    // تحميل السلاح وتقليل العدد لـ 3 فقط
+    loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/color.glb', (gltf) => {
+        const baseWeapon = gltf.scene;
+        baseWeapon.scale.set(8, 8, 8);
+        for(let i = 0; i < 3; i++) { // العدد أصبح 3 فقط
+            const group = new THREE.Group();
+            const x = (Math.random() - 0.5) * (worldSize - 400);
+            const z = (Math.random() - 0.5) * (worldSize - 400);
+            const ringGeo = new THREE.RingGeometry(8, 10, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+            const weaponModel = baseWeapon.clone();
+            weaponModel.position.y = 5;
+            group.add(weaponModel);
+            group.position.set(x, 0, z);
+            scene.add(group);
+            weaponPickups.push({ group: group, weapon: weaponModel, available: true, lastPickupTime: 0 });
+        }
+    });
+
+    /**
+     * 6. السيارة والبيكيسي
+     */
+    let car = null;
+    let weapon = null;
+    let isFiringRockets = false;
+    let autoFiringBeksi = false; 
+    let lastRocketTime = 0;
+    const rocketRate = 700; 
+    let lastFireTime = 0;
+    const fireRate = 85; 
+    const tracers = []; 
+
+    const carPhysics = {
+        speed: 0, acceleration: 0.065, reverseAccel: 0.03, friction: 0.975, maxSpeed: 1.8, maxReverseSpeed: -0.7, turnSpeed: 0.028, angle: 0
+    };
+
+    loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/kashafareed.glb', (gltf) => {
+        car = gltf.scene;
+        car.scale.set(5.5, 5.5, 5.5);
+        car.position.set(0, 0.92, 0); 
+        car.traverse(n => { if(n.isMesh) { n.castShadow = true; n.receiveShadow = true; }});
+        scene.add(car);
+
+        loader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/bexAsi.glb', (wGltf) => {
+            weapon = wGltf.scene;
+            weapon.scale.set(0.11, 0.11, 0.11); 
+            weapon.position.set(0, 0.7, 0); 
+            weapon.rotation.y = Math.PI * 1.5; 
+            car.add(weapon); 
+            const muzzleHelper = new THREE.Object3D();
+            muzzleHelper.position.set(0, 2.1, 7.5); 
+            weapon.add(muzzleHelper);
+            weapon.userData.muzzle = muzzleHelper;
+            const muzzleFlash = new THREE.PointLight(0xffaa00, 0, 25);
+            muzzleFlash.position.set(0, 2.1, 7.5); 
+            weapon.add(muzzleFlash);
+            weapon.userData.muzzleFlash = muzzleFlash;
+        });
+    });
+
+    /**
+     * 7. أنظمة القتال
+     */
+    const fireBtn = document.getElementById('fire-button');
+    fireBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); isFiringRockets = true; });
+    window.addEventListener('pointerup', () => isFiringRockets = false);
+
+    function createRandomTracer() {
+        if(!weapon || !car || !weapon.userData.muzzle) return;
+        const muzzlePos = new THREE.Vector3();
+        weapon.userData.muzzle.getWorldPosition(muzzlePos);
+        const tracerGeo = new THREE.CylinderGeometry(0.15, 0.1, 15, 6);
+        tracerGeo.rotateX(Math.PI / 2); 
+        const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.8 });
+        const tracer = new THREE.Mesh(tracerGeo, tracerMat);
+        tracer.position.copy(muzzlePos);
+        const weaponDir = new THREE.Vector3(0, 0, 1);
+        weaponDir.applyQuaternion(weapon.getWorldQuaternion(new THREE.Quaternion()));
+        const direction = weaponDir.normalize();
+        tracer.lookAt(muzzlePos.clone().add(direction));
+        scene.add(tracer);
+        tracers.push({ mesh: tracer, velocity: direction.multiplyScalar(16), life: 1.0 });
+        weapon.userData.muzzleFlash.intensity = 20;
+        setTimeout(() => { if(weapon) weapon.userData.muzzleFlash.intensity = 0; }, 30);
+    }
+
+    function createRealisticRocket() {
+        const rocketGroup = new THREE.Group();
+        const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 3, 12);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2f4f4f, metalness: 0.8, roughness: 0.2 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.x = Math.PI / 2;
+        rocketGroup.add(body);
+
+        const headGeo = new THREE.ConeGeometry(0.4, 1, 12);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.rotation.x = Math.PI / 2;
+        head.position.z = 2;
+        rocketGroup.add(head);
+
+        const finMat = new THREE.MeshStandardMaterial({ color: 0x2f4f4f });
+        for(let i=0; i<4; i++) {
+            const finPivot = new THREE.Group();
+            finPivot.rotation.z = (i * Math.PI) / 2;
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.8), finMat);
+            fin.position.set(0, 0.4, -1.2);
+            finPivot.add(fin);
+            rocketGroup.add(finPivot);
+        }
+
+        const light = new THREE.PointLight(0xff4500, 15, 20);
+        light.position.z = -2.5;
+        rocketGroup.add(light);
+
+        return rocketGroup;
+    }
+
+    function createSmoke(pos) {
+        const geo = new THREE.SphereGeometry(Math.random() * 0.5 + 0.5, 8, 8);
+        const mat = new THREE.MeshLambertMaterial({ color: 0x888888, transparent: true, opacity: 0.6 });
+        const smoke = new THREE.Mesh(geo, mat);
+        smoke.position.copy(pos);
+        scene.add(smoke);
+        smokeParticles.push({ mesh: smoke, life: 2.0 }); 
+    }
+
+    function findClosestEnemy(maxDist) {
+        let closest = null;
+        let minDist = maxDist;
+        enemies.forEach(enemy => {
+            const d = car.position.distanceTo(enemy.position);
+            if (d < minDist) { minDist = d; closest = enemy; }
+        });
+        return closest;
+    }
+
+    function shootRocket() {
+        if(!car || !activeSecondaryWeapon || rocketAmmo <= 0 || installingWeapon) return;
+        
+        const rocket = createRealisticRocket();
+        const spawnPos = new THREE.Vector3();
+        activeSecondaryWeapon.getWorldPosition(spawnPos);
+        spawnPos.y += 2.5;
+
+        rocket.position.copy(spawnPos);
+        
+        const carDirection = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion).normalize();
+        const launchDir = carDirection.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+        
+        rocket.lookAt(spawnPos.clone().add(launchDir));
+        
+        const target = findClosestEnemy(100);
+
+        scene.add(rocket);
+        rockets.push({ 
+            mesh: rocket, 
+            velocity: launchDir.multiplyScalar(12), 
+            life: 5.0, 
+            startTime: Date.now(),
+            target: target,
+            sideDir: new THREE.Vector3(1, 0, 0).applyQuaternion(car.quaternion).normalize()
+        });
+
+        rocketAmmo--;
+        ammoText.innerText = rocketAmmo;
+
+        if (rocketAmmo <= 0) {
+            setTimeout(() => {
+                car.remove(activeSecondaryWeapon);
+                activeSecondaryWeapon = null;
+                ammoUI.style.display = 'none';
+            }, 500);
+        }
+    }
+
+    function checkWeaponPickups() {
+        if(!car || installingWeapon) return;
+        const now = Date.now();
+        weaponPickups.forEach(pickup => {
+            if (!pickup.available && now - pickup.lastPickupTime > 15000) {
+                pickup.available = true;
+                scene.add(pickup.group);
+            }
+            if(pickup.available && activeSecondaryWeapon === null) {
+                const dist = car.position.distanceTo(pickup.group.position);
+                if(dist < 25) {
+                    pickup.available = false;
+                    pickup.lastPickupTime = now;
+                    scene.remove(pickup.group);
+                    
+                    const animWeapon = pickup.weapon.clone();
+                    animWeapon.scale.set(0.05, 0.05, 0.05); 
+                    animWeapon.position.set(0, 15, 0); 
+                    car.add(animWeapon);
+                    
+                    installingWeapon = {
+                        mesh: animWeapon,
+                        progress: 0
+                    };
+
+                    const pickupFlash = new THREE.PointLight(0x00ffff, 30, 80);
+                    pickupFlash.position.set(0, 5, 0);
+                    car.add(pickupFlash);
+                    setTimeout(() => car.remove(pickupFlash), 500);
+                }
+            }
+        });
+    }
+
+    /**
+     * 8. تتبع الأهداف (الرشاش والمنصة الملتقطة)
+     */
+    function updateWeaponTracking() {
+        if (!car || enemies.length === 0) return;
+        
+        const closestEnemy = findClosestEnemy(500);
+        
+        if (weapon) {
+            const targetQuaternion = new THREE.Quaternion();
+            if (closestEnemy) {
+                const dist = car.position.distanceTo(closestEnemy.position);
+                autoFiringBeksi = (dist < 50);
+
+                const targetPos = closestEnemy.position.clone().setY(5);
+                const weaponWorldPos = new THREE.Vector3();
+                weapon.getWorldPosition(weaponWorldPos);
+                const m1 = new THREE.Matrix4();
+                m1.lookAt(targetPos, weaponWorldPos, new THREE.Vector3(0, 1, 0));
+                targetQuaternion.setFromRotationMatrix(m1);
+                targetQuaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+            } else {
+                autoFiringBeksi = false;
+                targetQuaternion.setFromEuler(new THREE.Euler(0, Math.PI * 1.5, 0));
+            }
+            weapon.quaternion.slerp(targetQuaternion, 0.1);
+        }
+
+        if (activeSecondaryWeapon) {
+            const secTargetQuat = new THREE.Quaternion();
+            if (closestEnemy && car.position.distanceTo(closestEnemy.position) < 300) {
+                const targetPos = closestEnemy.position.clone().setY(2);
+                const secWorldPos = new THREE.Vector3();
+                activeSecondaryWeapon.getWorldPosition(secWorldPos);
+                const m2 = new THREE.Matrix4();
+                m2.lookAt(targetPos, secWorldPos, new THREE.Vector3(0, 1, 0));
+                secTargetQuat.setFromRotationMatrix(m2);
+                secTargetQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+            } else {
+                secTargetQuat.setFromEuler(new THREE.Euler(0, Math.PI, 0));
+            }
+            activeSecondaryWeapon.quaternion.slerp(secTargetQuat, 0.08);
+        }
+    }
+
+    /**
+     * 9. عصا التحكم
+     */
+    let joyData = { forward: 0, turn: 0 };
+    const joystick = nipplejs.create({
+        zone: document.getElementById('joystick-container'),
+        mode: 'static',
+        position: { left: '70px', bottom: '70px' },
+        color: 'white', size: 110
+    });
+    joystick.on('move', (evt, data) => {
+        const force = Math.min(data.distance / 50, 1);
+        joyData.forward = Math.sin(data.angle.radian) * force;
+        joyData.turn = -Math.cos(data.angle.radian) * force;
+    });
+    joystick.on('end', () => { joyData.forward = 0; joyData.turn = 0; });
+
+    /**
+     * 10. المحرك الرئيسي
+     */
+    function animate() {
+        requestAnimationFrame(animate);
+        const now = Date.now();
+        
+        if(clouds) {
+            clouds.children.forEach(c => {
+                c.position.x += c.userData.speed;
+                if(c.position.x > worldSize/1.2) c.position.x = -worldSize/1.2;
+            });
+        }
+
+        weaponPickups.forEach(wp => {
+            if(wp.available) {
+                wp.weapon.rotation.y += 0.04; 
+                wp.weapon.position.y = 5 + Math.sin(now * 0.003) * 2;
+            }
+        });
+
+        if (car) {
+            checkWeaponPickups();
+            updateWeaponTracking();
+
+            if (installingWeapon) {
+                installingWeapon.progress += 0.02;
+                installingWeapon.mesh.rotation.y += 0.3; 
+                
+                // تعديل الهبوط ليكون ملامساً تماماً (y = 0.59) وتصغير الحجم لـ (0.6)
+                installingWeapon.mesh.position.y = THREE.MathUtils.lerp(15, 0.59, installingWeapon.progress);
+                const s = THREE.MathUtils.lerp(0.05, 0.6, installingWeapon.progress);
+                installingWeapon.mesh.scale.set(s, s, s);
+
+                if (installingWeapon.progress >= 1.0) {
+                    activeSecondaryWeapon = installingWeapon.mesh;
+                    // وضعية نهائية ملامسة للسطح وبدون فراغ
+                    activeSecondaryWeapon.position.set(0, 0.59, -1.5);
+                    activeSecondaryWeapon.rotation.set(0, Math.PI, 0);
+                    installingWeapon = null;
+                    
+                    rocketAmmo = 5;
+                    ammoText.innerText = rocketAmmo;
+                    ammoUI.style.display = 'block';
+                }
+            }
+            
+            if (autoFiringBeksi) { 
+                if (now - lastFireTime > fireRate) {
+                    createRandomTracer();
+                    lastFireTime = now;
+                }
+            }
+
+            if (isFiringRockets && now - lastRocketTime > rocketRate) {
+                shootRocket();
+                lastRocketTime = now;
+            }
+            
+            for (let i = tracers.length - 1; i >= 0; i--) {
+                const t = tracers[i];
+                t.mesh.position.add(t.velocity);
+                t.life -= 0.03; 
+                t.mesh.material.opacity = t.life;
+                if (t.life <= 0) { scene.remove(t.mesh); tracers.splice(i, 1); }
+            }
+
+            for (let i = rockets.length - 1; i >= 0; i--) {
+                const r = rockets[i];
+                const elapsed = (now - r.startTime) / 1000;
+                
+                if (r.target) {
+                    const targetDir = new THREE.Vector3().subVectors(r.target.position, r.mesh.position).normalize();
+                    r.velocity.lerp(targetDir.multiplyScalar(12), 0.05);
+                }
+
+                const zigzagOffset = r.sideDir.clone().multiplyScalar(Math.sin(elapsed * 12) * 0.5);
+                const finalPos = r.velocity.clone().add(zigzagOffset);
+                
+                r.mesh.position.add(finalPos);
+                r.mesh.lookAt(r.mesh.position.clone().add(finalPos));
+                
+                if (Math.random() > 0.1) createSmoke(r.mesh.position);
+                if (r.target && r.mesh.position.distanceTo(r.target.position) < 15) { r.life = 0; }
+                r.life -= 0.01;
+                if (r.life <= 0) { scene.remove(r.mesh); rockets.splice(i, 1); }
+            }
+
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const p = smokeParticles[i];
+                p.life -= 0.02; 
+                p.mesh.material.opacity = p.life / 2;
+                p.mesh.scale.multiplyScalar(1.02);
+                if (p.life <= 0) { scene.remove(p.mesh); smokeParticles.splice(i, 1); }
+            }
+
+            if (joyData.forward > 0) carPhysics.speed += joyData.forward * carPhysics.acceleration;
+            else if (joyData.forward < 0) carPhysics.speed += joyData.forward * carPhysics.reverseAccel;
+
+            carPhysics.speed *= carPhysics.friction;
+            if (carPhysics.speed > carPhysics.maxSpeed) carPhysics.speed = carPhysics.maxSpeed;
+            if (carPhysics.speed < carPhysics.maxReverseSpeed) carPhysics.speed = carPhysics.maxReverseSpeed;
+
+            if (Math.abs(carPhysics.speed) > 0.05) {
+                carPhysics.angle += joyData.turn * carPhysics.turnSpeed * (carPhysics.speed > 0 ? 1 : -0.8);
+            }
+
+            car.rotation.y = carPhysics.angle + (Math.PI * 1.5);
+            let nextX = car.position.x + Math.sin(carPhysics.angle) * carPhysics.speed;
+            let nextZ = car.position.z + Math.cos(carPhysics.angle) * carPhysics.speed;
+            
+            nextX = Math.max(-boundary, Math.min(boundary, nextX));
+            nextZ = Math.max(-boundary, Math.min(boundary, nextZ));
+
+            let hit = false;
+            for (let i=0; i<tentColliders.length; i++) {
+                const tent = tentColliders[i];
+                const dx = nextX - tent.x; const dz = nextZ - tent.z;
+                if ((dx*dx + dz*dz) < (tent.radius*tent.radius)) { hit = true; carPhysics.speed *= -0.5; break; }
+            }
+            if (!hit) { car.position.x = nextX; car.position.z = nextZ; }
+
+            const camOffset = new THREE.Vector3(-Math.sin(carPhysics.angle) * 60, 25, -Math.cos(carPhysics.angle) * 60);
+            camera.position.lerp(car.position.clone().add(camOffset), 0.1);
+            camera.lookAt(car.position.x, car.position.y + 5, car.position.z);
+        }
+        renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
