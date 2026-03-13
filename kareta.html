@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>UE5 Ultra Realistic Movement - Lola</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* تحسينات التوافق مع الهواتف ومنع التمرير */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { 
+            width: 100%; height: 100%; overflow: hidden; 
+            background: #000; touch-action: none; font-family: sans-serif;
+            position: fixed; /* لمنع التمرير المطاطي في iOS */
+        }
+        
+        #hud {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; border: 20px solid rgba(255,255,255,0.01); z-index: 30;
+        }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 40px; height: 40px;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 500;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .ch-line {
+            position: absolute; background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.5); border-radius: 1px;
+            transition: transform 0.15s ease-out;
+        }
+
+        .ch-top    { width: 2px; height: 10px; transform: translateY(-8px); }
+        .ch-bottom { width: 2px; height: 10px; transform: translateY(8px); }
+        .ch-left   { width: 10px; height: 2px; transform: translateX(-8px); }
+        .ch-right  { width: 10px; height: 2px; transform: translateX(8px); }
+
+        .ch-dot {
+            width: 3px; height: 3px; background: #00ff00; border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0, 255, 0, 0.8);
+        }
+
+        #joystick-zone {
+            position: absolute; bottom: 60px; left: 60px;
+            width: 100px; height: 100px; z-index: 100; opacity: 0.5;
+        }
+
+        /* تحسين استجابة الأزرار على أحجام الشاشات المختلفة */
+        .game-btn {
+            position: absolute; display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: bold; font-size: 14px; cursor: pointer; 
+            z-index: 200; pointer-events: auto; user-select: none; 
+            -webkit-tap-highlight-color: transparent; backdrop-filter: blur(5px);
+            background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+        }
+
+        #run-btn { top: 20px; right: 20px; width: 60px; height: 60px; }
+        #jump-btn { bottom: 60px; right: 20px; width: 70px; height: 70px; }
+        #knee-btn { bottom: 60px; right: 100px; width: 70px; height: 70px; }
+        #creep-btn { bottom: 140px; right: 20px; width: 70px; height: 70px; }
+        
+        /* زر القتال (يد البوكس) */
+        #attack-btn { bottom: 140px; right: 100px; width: 70px; height: 70px; background: rgba(255, 255, 255, 0.1); }
+        #attack-btn svg { width: 40px; height: 40px; fill: rgba(255,255,255,0.5); }
+
+        /* زر العين (ببجي ستايل) */
+        #eye-btn {
+            position: absolute; top: 100px; right: 25px;
+            width: 50px; height: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 300; pointer-events: auto;
+            color: rgba(255,255,255,0.4);
+        }
+
+        #eye-btn svg { width: 30px; height: 30px; fill: currentColor; }
+
+        #run-btn:active, #jump-btn:active, #knee-btn:active, #creep-btn:active, #eye-btn:active, #attack-btn:active { background: rgba(255, 255, 255, 0.4); }
+
+        #loading-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111; color: white; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 1000; font-size: 1.2rem; text-align: center; padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div id="status-text">جاري تشغيل محرك الحركة الواقعي... <br> يتم الآن تأمين الكاميرا والجاذبية</div>
+    </div>
+
+    <div id="crosshair">
+        <div class="ch-dot"></div>
+        <div class="ch-line ch-top" id="ch-t"></div>
+        <div class="ch-line ch-bottom" id="ch-b"></div>
+        <div class="ch-line ch-left" id="ch-l"></div>
+        <div class="ch-line ch-right" id="ch-r"></div>
+    </div>
+    
+    <div id="run-btn" class="game-btn">RUN</div>
+    <div id="jump-btn" class="game-btn">JUMP</div>
+    <div id="knee-btn" class="game-btn">KNEE</div>
+    <div id="creep-btn" class="game-btn">CREEP</div>
+    
+    <div id="attack-btn" class="game-btn">
+        <svg viewBox="0 0 24 24"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14 4.14 5.57 2 7.71 3.43 9.14 2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 19.14l4.28-4.28z"/></svg>
+    </div>
+
+    <div id="eye-btn">
+        <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+    </div>
+
+    <div id="hud"></div>
+    <div id="joystick-zone"></div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Sky.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, soldier, clock, mixer;
+        let isRunningMode = false; 
+        let isJumping = false;
+        let isKneeMode = false;
+        let isCreepMode = false;
+        let isTransitioning = false;
+        let isAttacking = false;
+        
+        let idleTimer = 0;
+        let isAstrahaMode = false;
+
+        let touchLookId = null;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let cameraYaw = Math.PI; 
+        let cameraPitch = 0; 
+        let touchSensitivity = 0.005;
+
+        // متغيرات ميزة العين (Free Look)
+        let isFreeLook = false;
+        let freeLookYaw = 0;
+        let freeLookPitch = 0;
+        let eyeTouchId = null;
+
+        let currentCamHeight = 2.6;
+        let targetCamHeight = 2.6;
+
+        let joystick = { x: 0, y: 0, active: false, dist: 0, rawX: 0, angle: 0 };
+        let currentVelocity = new THREE.Vector3(0, 0, 0);
+        let targetVelocity = new THREE.Vector3(0, 0, 0);
+
+        const CONSTANTS = {
+            MOVE_SPEED: 0.025,
+            KNEE_SPEED: 0.012,
+            CREEP_SPEED: 0.008,
+            RUN_SPEED: 0.065,
+            ROTATION_SMOOTH: 0.15, 
+            ACCELERATION: 0.03,
+            CAMERA_LERP: 1.0, 
+            HEIGHT_SMOOTH: 0.2, 
+            ANIM_FADE: 0.3,
+            IDLE_WAIT_TIME: 10,
+            GROUND_LEVEL: 0, 
+            CAM_MIN_HEIGHT: 0.5 
+        };
+
+        const animFiles = {
+            idle: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/wakef.fbx',
+            astraha: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/Astraha_gada.fbx',
+            forward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/walk_amam.fbx',
+            backward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/walk_back.fbx',
+            left: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/walk_left.fbx',
+            right: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/walk_right.fbx',
+            run: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/run.fbx',
+            jump: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/stand/jump_wakef.fbx',
+            knee_idle: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/knee/Knee.fbx',
+            knee_forward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/knee/K_amam.fbx',
+            knee_backward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/knee/K_kalf.fbx',
+            knee_left: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/knee/K_left.fbx',
+            knee_right: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/knee/K_right.fbx',
+            creep_idle: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/stand_down.fbx',
+            creep_forward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/z_amam.fbx',
+            creep_backward: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/z_kalf.fbx',
+            creep_left: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/z_left.fbx',
+            creep_right: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/z_right.fbx',
+            creep_standup: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/Down/Stand_Up.fbx',
+            // ملفات الأنيميشن الجديدة المأخوذة من مسارات صورك
+            boxes: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/attack/Boxes.fbx',
+            defrat: 'https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/NoGun/attack/defrat.fbx'
+        };
+
+        let actions = {};
+        let activeAction;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 5000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1.2);
+            light.position.set(50, 100, 50);
+            light.castShadow = true;
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+            const grassTex = new THREE.TextureLoader().load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+            grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+            grassTex.repeat.set(100, 100);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.8 }));
+            floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+            scene.add(floor);
+
+            soldier = new THREE.Group();
+            scene.add(soldier);
+            const fbxLoader = new THREE.FBXLoader();
+            
+            fbxLoader.load('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/character/Lola_B_Styperek.fbx', (object) => {
+                object.scale.setScalar(0.01);
+                object.traverse(c => { if(c.isMesh) { c.castShadow = c.receiveShadow = true; }});
+                soldier.add(object);
+                mixer = new THREE.AnimationMixer(object);
+
+                const loadA = (key, url) => {
+                    fbxLoader.load(url, (anim) => {
+                        const action = mixer.clipAction(anim.animations[0]);
+                        // الحركات التي تنفذ مرة واحدة فقط
+                        if(key === 'jump' || key === 'creep_standup' || key === 'astraha' || key === 'boxes' || key === 'defrat' || key.includes('creep')) {
+                            action.setLoop(THREE.LoopOnce);
+                            action.clampWhenFinished = true;
+                        }
+                        actions[key] = action;
+                        if(key === 'idle') { actions[key].play(); activeAction = actions[key]; }
+                    });
+                };
+
+                Object.keys(animFiles).forEach(key => loadA(key, animFiles[key]));
+                setTimeout(() => { document.getElementById('loading-screen').style.display = 'none'; }, 2500);
+            });
+
+            setupControls();
+            setupTouchLook(); 
+            clock = new THREE.Clock();
+            animate();
+        }
+
+        function setupTouchLook() {
+            window.addEventListener('touchstart', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let t = e.changedTouches[i];
+                    if (e.target.closest('#eye-btn')) {
+                        isFreeLook = true;
+                        eyeTouchId = t.identifier;
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                        freeLookYaw = 0; 
+                        freeLookPitch = 0;
+                        return;
+                    }
+                    if (t.clientX > window.innerWidth / 2 && touchLookId === null) {
+                        touchLookId = t.identifier;
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let t = e.changedTouches[i];
+                    if (t.identifier === eyeTouchId && isFreeLook) {
+                        let dx = t.clientX - lastTouchX;
+                        let dy = t.clientY - lastTouchY;
+                        freeLookYaw -= dx * touchSensitivity;
+                        freeLookPitch += dy * touchSensitivity;
+                        freeLookPitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, freeLookPitch));
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                    } else if (t.identifier === touchLookId) {
+                        let dx = t.clientX - lastTouchX;
+                        let dy = t.clientY - lastTouchY;
+                        cameraYaw -= dx * touchSensitivity;
+                        cameraPitch += dy * touchSensitivity; 
+                        cameraPitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, cameraPitch));
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchend', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let t = e.changedTouches[i];
+                    if (t.identifier === eyeTouchId) {
+                        isFreeLook = false;
+                        eyeTouchId = null;
+                    }
+                    if (t.identifier === touchLookId) touchLookId = null;
+                }
+            });
+        }
+
+        function updateCrosshairUI(speedFactor) {
+            const gap = 8 + (speedFactor * 25);
+            document.getElementById('ch-t').style.transform = `translateY(-${gap}px)`;
+            document.getElementById('ch-b').style.transform = `translateY(${gap}px)`;
+            document.getElementById('ch-l').style.transform = `translateX(-${gap}px)`;
+            document.getElementById('ch-r').style.transform = `translateX(${gap}px)`;
+        }
+
+        function setupControls() {
+            const runBtn = document.getElementById('run-btn');
+            runBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if(isKneeMode || isCreepMode || isTransitioning || isJumping || isAttacking) return;
+                resetIdleTimer();
+                isRunningMode = !isRunningMode;
+                runBtn.style.background = isRunningMode ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.2)";
+                updateMovementAnimation();
+            });
+
+            document.getElementById('jump-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (isJumping || isCreepMode || isKneeMode || isTransitioning || isAttacking || !actions['jump']) return;
+                resetIdleTimer();
+                isJumping = true;
+                fadeTo('jump');
+                const onFinished = (e) => {
+                    if (e.action === actions['jump']) {
+                        mixer.removeEventListener('finished', onFinished);
+                        isJumping = false;
+                        updateMovementAnimation();
+                    }
+                };
+                mixer.addEventListener('finished', onFinished);
+            });
+
+            const kneeBtn = document.getElementById('knee-btn');
+            kneeBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if(isTransitioning || isJumping || isAttacking) return;
+                resetIdleTimer();
+                isKneeMode = !isKneeMode;
+                if(isKneeMode) { 
+                    isRunningMode = false; 
+                    isCreepMode = false;
+                    targetCamHeight = 1.8;
+                } else {
+                    targetCamHeight = 2.6;
+                }
+                kneeBtn.style.background = isKneeMode ? "rgba(255, 255, 255, 0.6)" : "rgba(255, 255, 255, 0.2)";
+                document.getElementById('creep-btn').style.background = "rgba(255, 255, 255, 0.2)";
+                updateMovementAnimation();
+            });
+
+            const creepBtn = document.getElementById('creep-btn');
+            creepBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if(isTransitioning || isJumping || isAttacking) return;
+                resetIdleTimer();
+                if(!isCreepMode) {
+                    isCreepMode = true;
+                    isRunningMode = false;
+                    isKneeMode = false;
+                    targetCamHeight = 1.0; 
+                    creepBtn.style.background = "rgba(255, 255, 255, 0.6)";
+                    document.getElementById('knee-btn').style.background = "rgba(255, 255, 255, 0.2)";
+                    updateMovementAnimation();
+                } else {
+                    isTransitioning = true;
+                    targetCamHeight = 2.6; 
+                    fadeTo('creep_standup');
+                    const onStandupFinished = (e) => {
+                        if(e.action.getClip().name === actions['creep_standup'].getClip().name) {
+                            mixer.removeEventListener('finished', onStandupFinished);
+                            isCreepMode = false;
+                            isTransitioning = false;
+                            creepBtn.style.background = "rgba(255, 255, 255, 0.2)";
+                            updateMovementAnimation();
+                        }
+                    };
+                    mixer.addEventListener('finished', onStandupFinished);
+                }
+            });
+
+            // زر الهجوم (البوكس) المبرمج لتنفيذ Boxes ثم defrat
+            document.getElementById('attack-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (isAttacking || isJumping || isTransitioning || isCreepMode || isKneeMode || !actions['boxes'] || !actions['defrat']) return;
+                
+                resetIdleTimer();
+                isAttacking = true;
+                
+                // تشغيل انيميشن Boxes أولاً
+                fadeTo('boxes');
+                
+                const onBoxesFinished = (e) => {
+                    if (e.action === actions['boxes']) {
+                        mixer.removeEventListener('finished', onBoxesFinished);
+                        
+                        // فور انتهاء Boxes يتم تشغيل defrat
+                        fadeTo('defrat');
+                        
+                        const onDefratFinished = (e) => {
+                            if (e.action === actions['defrat']) {
+                                mixer.removeEventListener('finished', onDefratFinished);
+                                isAttacking = false;
+                                updateMovementAnimation();
+                            }
+                        };
+                        mixer.addEventListener('finished', onDefratFinished);
+                    }
+                };
+                mixer.addEventListener('finished', onBoxesFinished);
+            });
+
+            const nj = nipplejs.create({
+                zone: document.getElementById('joystick-zone'),
+                mode: 'static', position: { left: '60px', bottom: '60px' },
+                color: 'white', size: 80
+            });
+
+            nj.on('move', (e, d) => {
+                resetIdleTimer();
+                joystick.active = true;
+                joystick.x = -Math.cos(d.angle.radian) * (d.distance / 40);
+                joystick.y = Math.sin(d.angle.radian) * (d.distance / 40);
+                joystick.dist = d.distance / 40;
+                joystick.angle = d.angle.degree;
+                updateMovementAnimation();
+            });
+
+            nj.on('end', () => { 
+                joystick.active = false; 
+                updateMovementAnimation();
+            });
+        }
+
+        function resetIdleTimer() {
+            idleTimer = 0;
+            if(isAstrahaMode) {
+                isAstrahaMode = false;
+                updateMovementAnimation();
+            }
+        }
+
+        function updateMovementAnimation() {
+            if (isJumping || isTransitioning || isAttacking) return;
+
+            if (isCreepMode) {
+                targetCamHeight = 1.0; 
+                if (!joystick.active || joystick.dist < 0.1) { fadeTo('creep_idle'); return; }
+                let angle = joystick.angle;
+                if (angle > 45 && angle <= 135) fadeTo('creep_forward');
+                else if (angle > 135 && angle <= 225) fadeTo('creep_left');
+                else if (angle > 225 && angle <= 315) fadeTo('creep_backward');
+                else fadeTo('creep_right');
+                return;
+            }
+
+            if (isKneeMode) {
+                targetCamHeight = 1.8; 
+                if (!joystick.active || joystick.dist < 0.1) { fadeTo('knee_idle'); return; }
+                let angle = joystick.angle;
+                if (angle > 45 && angle <= 135) fadeTo('knee_forward');
+                else if (angle > 135 && angle <= 225) fadeTo('knee_left');
+                else if (angle > 225 && angle <= 315) fadeTo('knee_backward');
+                else fadeTo('knee_right');
+                return;
+            }
+
+            targetCamHeight = 2.6; 
+
+            if (isRunningMode) { fadeTo('run'); return; }
+
+            if(!joystick.active || joystick.dist < 0.1) {
+                if(isAstrahaMode) fadeTo('astraha');
+                else fadeTo('idle');
+                return;
+            }
+
+            let angle = joystick.angle;
+            if (angle > 45 && angle <= 135) fadeTo('forward');
+            else if (angle > 135 && angle <= 225) fadeTo('left');
+            else if (angle > 225 && angle <= 315) fadeTo('backward');
+            else fadeTo('right');
+        }
+
+        function fadeTo(name) {
+            const next = actions[name];
+            if (!next || next === activeAction) return;
+            next.reset().fadeIn(CONSTANTS.ANIM_FADE).play();
+            if (activeAction) activeAction.fadeOut(CONSTANTS.ANIM_FADE);
+            activeAction = next;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            if (!joystick.active && !isJumping && !isKneeMode && !isCreepMode && !isRunningMode && !isTransitioning && !isAttacking) {
+                idleTimer += dt;
+                if (idleTimer >= CONSTANTS.IDLE_WAIT_TIME && !isAstrahaMode) {
+                    isAstrahaMode = true;
+                    updateMovementAnimation();
+                }
+            } else {
+                idleTimer = 0;
+            }
+
+            if (soldier && !isTransitioning && !isAttacking) {
+                targetVelocity.set(0, 0, 0);
+                let speed = isCreepMode ? CONSTANTS.CREEP_SPEED : (isKneeMode ? CONSTANTS.KNEE_SPEED : CONSTANTS.MOVE_SPEED);
+
+                if (isRunningMode && !isCreepMode && !isKneeMode) {
+                    targetVelocity.z = CONSTANTS.RUN_SPEED;
+                } else if (joystick.active && joystick.dist > 0.1) {
+                    targetVelocity.z = joystick.y * speed;
+                    targetVelocity.x = joystick.x * speed * 0.5;
+                }
+
+                currentVelocity.lerp(targetVelocity, CONSTANTS.ACCELERATION);
+                
+                // دوران الشخصية يتبع cameraYaw فقط إذا لم نكن في وضع العين
+                if (!isFreeLook) {
+                    soldier.rotation.y = THREE.MathUtils.lerp(soldier.rotation.y, cameraYaw + Math.PI, CONSTANTS.ROTATION_SMOOTH);
+                }
+                
+                soldier.position.y = Math.max(CONSTANTS.GROUND_LEVEL, soldier.position.y);
+                soldier.translateZ(currentVelocity.z);
+                soldier.translateX(currentVelocity.x);
+                updateCrosshairUI(currentVelocity.length() / CONSTANTS.RUN_SPEED);
+            }
+
+            if (mixer) mixer.update(dt);
+            
+            if (soldier) {
+                currentCamHeight = THREE.MathUtils.lerp(currentCamHeight, targetCamHeight, CONSTANTS.HEIGHT_SMOOTH);
+                
+                // عند ترك العين، نرجع إزاحات العين للصفر تدريجياً
+                if (!isFreeLook) {
+                    freeLookYaw = THREE.MathUtils.lerp(freeLookYaw, 0, 0.1);
+                    freeLookPitch = THREE.MathUtils.lerp(freeLookPitch, 0, 0.1);
+                }
+
+                const finalYaw = cameraYaw + freeLookYaw;
+                const finalPitch = cameraPitch + freeLookPitch;
+
+                const dist = 3.8; 
+                const verticalOffset = Math.sin(finalPitch) * dist;
+                
+                const relativeCameraOffset = new THREE.Vector3(
+                    Math.sin(finalYaw) * Math.cos(finalPitch) * dist,
+                    verticalOffset + currentCamHeight,
+                    Math.cos(finalYaw) * Math.cos(finalPitch) * dist
+                );
+
+                const targetPos = soldier.position.clone().add(relativeCameraOffset);
+                
+                if (targetPos.y < CONSTANTS.GROUND_LEVEL + CONSTANTS.CAM_MIN_HEIGHT) {
+                    targetPos.y = CONSTANTS.GROUND_LEVEL + CONSTANTS.CAM_MIN_HEIGHT;
+                }
+
+                camera.position.copy(targetPos); 
+
+                const lookAtY = Math.max(CONSTANTS.GROUND_LEVEL + 0.2, currentCamHeight - 0.4);
+                const lookAtPos = soldier.position.clone().add(new THREE.Vector3(0, lookAtY, 0));
+                camera.lookAt(lookAtPos);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
