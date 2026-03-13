@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>لوحة المونوبولي - عرض البيدق والإحداثيات</title>
+    <style>
+        /* إعدادات الشاشة الكاملة */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000; /* خلفية سوداء للتركيز */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .board-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+
+        .board-image {
+            display: block;
+            max-width: 100vw;
+            max-height: 100vh;
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        /* تصميم البيدق الأحمر المجسم */
+        #player-pawn {
+            position: absolute;
+            width: 3.5%; 
+            height: 5.5%;
+            z-index: 100;
+            /* التوسيط في قلب الإحداثيات */
+            transform: translate(-50%, -50%); 
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));
+            transition: all 0.5s ease-in-out;
+        }
+
+        .head { 
+            width: 100%; 
+            height: 40%; 
+            background: radial-gradient(circle at 30% 30%, #ff4d4d, #800000); 
+            border-radius: 50%; 
+        }
+        .body { 
+            width: 120%; 
+            height: 60%; 
+            background: linear-gradient(to bottom, #ff4d4d, #800000); 
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); 
+            margin-left: -10%; 
+            border-radius: 0 0 40% 40%; 
+        }
+    </style>
+</head>
+<body>
+
+    <div class="board-container">
+        <img src="https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/572ce4b16d5953358ec62932d5125b9e.jpg" 
+             class="board-image" alt="Monopoly Board">
+
+        <div id="player-pawn">
+            <div class="head"></div>
+            <div class="body"></div>
+        </div>
+    </div>
+
+<script>
+    // مصفوفة الإحداثيات الـ 40 التي قمت بتزويدي بها
+    const centers = [
+        {x: 92.38, y: 90.85}, // خانة 0 (GO)
+        {x: 81.71, y: 93.29}, // خانة 1
+        {x: 74.09, y: 92.38}, // خانة 2
+        {x: 66.16, y: 92.38}, // خانة 3
+        {x: 58.23, y: 90.85}, // خانة 4
+        {x: 50.61, y: 91.16}, // خانة 5
+        {x: 42.68, y: 92.99}, // خانة 6
+        {x: 34.76, y: 92.68}, // خانة 7
+        {x: 25.91, y: 93.29}, // خانة 8
+        {x: 18.29, y: 93.60}, // خانة 9
+        {x: 7.62, y: 91.16},  // خانة 10
+        {x: 5.79, y: 82.01},  // خانة 11
+        {x: 7.01, y: 74.09},  // خانة 12
+        {x: 7.62, y: 65.55},  // خانة 13
+        {x: 7.62, y: 57.93},  // خانة 14
+        {x: 7.32, y: 51.52},  // خانة 15
+        {x: 7.32, y: 41.77},  // خانة 16
+        {x: 7.01, y: 32.93},  // خانة 17
+        {x: 8.23, y: 25.61},  // خانة 18
+        {x: 7.93, y: 17.07},  // خانة 19
+        {x: 6.71, y: 7.32},   // خانة 20
+        {x: 18.29, y: 6.71},  // خانة 21
+        {x: 26.52, y: 8.54},  // خانة 22
+        {x: 33.84, y: 7.93},  // خانة 23
+        {x: 42.99, y: 7.93},  // خانة 24
+        {x: 49.39, y: 6.71},  // خانة 25
+        {x: 59.15, y: 6.40},  // خانة 26
+        {x: 66.46, y: 7.32},  // خانة 27
+        {x: 74.70, y: 8.23},  // خانة 28
+        {x: 80.79, y: 6.71},  // خانة 29
+        {x: 93.60, y: 8.54},  // خانة 30
+        {x: 93.90, y: 17.68}, // خانة 31
+        {x: 93.90, y: 25.30}, // خانة 32
+        {x: 93.60, y: 33.23}, // خانة 33
+        {x: 93.29, y: 42.07}, // خانة 34
+        {x: 92.68, y: 50.61}, // خانة 35
+        {x: 92.68, y: 57.32}, // خانة 36
+        {x: 92.68, y: 65.55}, // خانة 37
+        {x: 92.99, y: 73.17}, // خانة 38
+        {x: 92.07, y: 82.01}  // خانة 39
+    ];
+
+    const pawn = document.getElementById('player-pawn');
+
+    // وظيفة لتحديث موقع البيدق برمجياً
+    function setPawnPosition(index) {
+        if (index >= 0 && index < centers.length) {
+            pawn.style.left = centers[index].x + "%";
+            pawn.style.top = centers[index].y + "%";
+        }
+    }
+
+    // افتراضياً يوضع البيدق على خانة GO عند التحميل
+    window.onload = () => setPawnPosition(0);
+</script>
+
+</body>
+</html>
