@@ -549,6 +549,39 @@
         });
 
         init();
+        // --- كود استقبال الأوامر الخارجية ---
+window.addEventListener('message', function(event) {
+    const data = event.data;
+
+    // التأكد من وصول الطلب ومن وجود المحرك جاهزاً
+    if (data.type === 'PLAY_NEW_ANIM' && window.mixer) {
+        const loader = new THREE.FBXLoader();
+        
+        // تحميل الأنيميشن من الرابط المرسل
+        loader.load(data.url, (anim) => {
+            const newAction = window.mixer.clipAction(anim.animations[0]);
+            
+            // إعدادات الحركة (تعمل مرة واحدة وتتوقف)
+            newAction.setLoop(THREE.LoopOnce);
+            newAction.clampWhenFinished = true;
+
+            // تنفيذ الانتقال من الحركة الحالية للحركة الجديدة
+            if (window.activeAction) window.activeAction.fadeOut(0.3);
+            newAction.reset().fadeIn(0.3).play();
+
+            // العودة للوقوف (idle) تلقائياً عند الانتهاء
+            const onFinished = (e) => {
+                if(e.action === newAction) {
+                    window.mixer.removeEventListener('finished', onFinished);
+                    window.actions['idle'].reset().fadeIn(0.5).play();
+                    window.activeAction = window.actions['idle'];
+                }
+            };
+            window.mixer.addEventListener('finished', onFinished);
+        });
+    }
+});
+
     </script>
 </body>
 </html>
