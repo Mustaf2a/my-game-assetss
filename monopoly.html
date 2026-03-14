@@ -2,135 +2,683 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>لوحة المونوبولي - عرض البيدق والإحداثيات</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>مونوبولي الاحترافية - النسخة العالمية</title>
     <style>
-        /* إعدادات الشاشة الكاملة */
+        :root {
+            --p1-color: #ff4d4d;
+            --p2-color: #3498db;
+            --gold: #f1c40f;
+            --bg-dark: #0a0a0a;
+            --card-bg: #ffffff;
+            --chance-orange: #f39c12;
+            --community-blue: #3498db;
+        }
+
+        /* منع التحديد واللمس الافتراضي */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000; /* خلفية سوداء للتركيز */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: var(--bg-dark);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            /* منع السحب لأسفل لتحديث الصفحة في الموبايل */
+            overscroll-behavior-y: contain;
         }
 
+        /* البروفايلات - تم تصغيرها */
+        .profile {
+            position: absolute; top: 10px; width: 85px; padding: 6px;
+            border-radius: 10px; background: rgba(255, 255, 255, 0.07);
+            backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center; color: white; z-index: 2000; transition: 0.3s;
+        }
+        @keyframes pulse-active {
+            0% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); transform: scale(1); }
+            70% { box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); transform: scale(1.03); }
+            100% { box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); transform: scale(1); }
+        }
+        .profile.active { border-color: var(--gold); animation: pulse-active 2s infinite; }
+        .profile-right { right: 10px; }
+        .profile-left { left: 10px; }
+        .avatar { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto 3px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .p1-avatar { background: var(--p1-color); }
+        .p2-avatar { background: var(--p2-color); }
+        .username { font-size: 12px; display: block; margin-bottom: 2px; }
+        .balance { color: #2ecc71; font-size: 13px; font-weight: bold; }
+        .timer-bar { width: 100%; height: 3px; background: rgba(255,255,255,0.1); margin-top: 5px; border-radius: 2px; }
+        .timer-progress { width: 100%; height: 100%; background: var(--gold); transition: width 1s linear; }
+
+        /* اللوحة */
         .board-container {
-            position: relative;
-            display: inline-block;
-            max-width: 100vw;
-            max-height: 100vh;
+            position: relative; display: inline-block;
+            max-width: 80vw; max-height: 70vh; margin: 10px 0;
+            box-shadow: 0 0 50px rgba(0,0,0,0.9); border: 2px solid #333;
+        }
+        .board-image { display: block; max-width: 80vw; max-height: 70vh; object-fit: contain; }
+
+        /* البيادق */
+        .pawn { position: absolute; width: 3.2%; height: 5.2%; z-index: 100; transform: translate(-50%, -50%); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); filter: drop-shadow(0 2px 4px black); }
+        .pawn.moving { transform: translate(-50%, -120%) scale(1.5); z-index: 500; }
+        .pawn .head { width: 100%; height: 40%; border-radius: 50%; background: inherit; border: 1px solid rgba(255,255,255,0.3); }
+        .pawn .body { width: 120%; height: 60%; clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); margin-left: -10%; background: inherit; opacity: 0.9; }
+        #pawn-1 { background: var(--p1-color); }
+        #pawn-2 { background: var(--p2-color); }
+
+        /* شريط الملكية */
+        .owner-tag {
+            position: absolute; width: 20px; height: 9px; 
+            border-radius: 2px; transform: translate(-30%, -30%);
+            box-shadow: 0 0 3px rgba(0,0,0,0.5); z-index: 50;
+            border: 1px solid rgba(255,255,255,0.4);
+            transition: 0.3s; display: flex; align-items: center; justify-content: center;
+            font-size: 5px; color: white; font-weight: bold; pointer-events: none;
         }
 
-        .board-image {
-            display: block;
-            max-width: 100vw;
-            max-height: 100vh;
-            object-fit: contain;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+        /* تصميم بطاقة الملكية المطور */
+        #property-card {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            width: 280px; background: var(--card-bg); border-radius: 15px;
+            z-index: 3000; padding: 0; text-align: center; color: #1a1a1a;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5); transition: 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            border: 1px solid #ddd; overflow: hidden;
+        }
+        #property-card.show { transform: translate(-50%, -50%) scale(1); }
+        
+        .close-card {
+            position: absolute; top: 5px; right: 10px; font-size: 24px; 
+            color: white; cursor: pointer; font-weight: bold; z-index: 10;
         }
 
-        /* تصميم البيدق الأحمر المجسم */
-        #player-pawn {
-            position: absolute;
-            width: 3.5%; 
-            height: 5.5%;
-            z-index: 100;
-            /* التوسيط في قلب الإحداثيات */
-            transform: translate(-50%, -50%); 
-            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));
-            transition: all 0.5s ease-in-out;
-        }
+        .card-banner { height: 60px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        
+        .card-content { padding: 20px; background: white; min-height: 100px; display: flex; flex-direction: column; justify-content: center; }
+        .property-title { font-size: 20px; margin: 0 0 10px 0; color: #2c3e50; font-weight: 800; }
+        
+        .rent-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; border-bottom: 1px solid #eee; }
+        .rent-row.main { font-weight: bold; font-size: 15px; border-bottom: 2px solid #333; margin-bottom: 5px; }
+        
+        .card-footer { padding: 15px; background: #f9f9f9; display: flex; gap: 10px; justify-content: center; border-top: 1px solid #eee; }
+        
+        /* أزرار البطاقة */
+        .btn-buy { background: #2ecc71; color: white; padding: 8px 20px; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; flex: 1; }
+        .btn-cancel { background: #e74c3c; color: white; padding: 8px 20px; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; flex: 1; }
+        .btn-action { background: #34495e; color: white; padding: 10px 30px; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
 
-        .head { 
-            width: 100%; 
-            height: 40%; 
-            background: radial-gradient(circle at 30% 30%, #ff4d4d, #800000); 
-            border-radius: 50%; 
+        /* واجهة النرد */
+        .dice-container { display: flex; gap: 15px; margin-bottom: 10px; }
+        .dice {
+            width: 55px; height: 55px; background: white; border-radius: 12px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 28px; font-weight: bold; color: #333;
+            box-shadow: 0 6px 0 #ddd, 0 10px 15px rgba(0,0,0,0.3);
+            transition: 0.1s;
         }
-        .body { 
-            width: 120%; 
-            height: 60%; 
-            background: linear-gradient(to bottom, #ff4d4d, #800000); 
-            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); 
-            margin-left: -10%; 
-            border-radius: 0 0 40% 40%; 
-        }
+        .dice.rolling { animation: shake 0.15s infinite; background: #eee; }
+        @keyframes shake { 0% { transform: translate(2px, 1px) rotate(0deg); } 50% { transform: translate(-1px, -2px) rotate(-5deg); } 100% { transform: translate(1px, 2px) rotate(5deg); } }
+
+        .controls { display: flex; flex-direction: column; align-items: center; }
+        #roll-btn { padding: 12px 50px; font-size: 20px; font-weight: bold; cursor: pointer; background: var(--gold); border: none; border-radius: 35px; box-shadow: 0 4px 15px rgba(241, 196, 15, 0.4); }
+        #roll-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #999; box-shadow: none; }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
 
-    <div class="board-container">
-        <img src="https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/572ce4b16d5953358ec62932d5125b9e.jpg" 
-             class="board-image" alt="Monopoly Board">
+    <div id="profile-2" class="profile profile-left">
+        <div class="avatar p2-avatar">👤</div>
+        <span class="username">لاعب 2</span>
+        <div class="balance" id="balance-2">$1500</div>
+        <div class="timer-bar"><div id="timer-2" class="timer-progress"></div></div>
+    </div>
 
-        <div id="player-pawn">
-            <div class="head"></div>
-            <div class="body"></div>
+    <div id="profile-1" class="profile profile-right active">
+        <div class="avatar p1-avatar">👤</div>
+        <span class="username">لاعب 1</span>
+        <div class="balance" id="balance-1">$1500</div>
+        <div class="timer-bar"><div id="timer-1" class="timer-progress"></div></div>
+    </div>
+
+    <div id="property-card">
+        <span class="close-card" onclick="hideCardAndSwitch()">×</span>
+        <div class="card-banner" id="card-color">سند ملكية</div>
+        <div class="card-content">
+            <h2 class="property-title" id="card-name">اسم العقار</h2>
+            <div id="card-body"></div>
         </div>
+        <div class="card-footer" id="card-actions"></div>
+    </div>
+
+    <div class="board-container" id="main-board">
+        <img src="https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/572ce4b16d5953358ec62932d5125b9e.jpg" class="board-image" draggable="false">
+        <div id="pawn-1" class="pawn"><div class="head"></div><div class="body"></div></div>
+        <div id="pawn-2" class="pawn"><div class="head"></div><div class="body"></div></div>
+    </div>
+
+    <div class="controls">
+        <div class="dice-container">
+            <div id="dice-1" class="dice">⚀</div>
+            <div id="dice-2" class="dice">⚀</div>
+        </div>
+        <button id="roll-btn" onclick="handleRoll()">ارمي النرد</button>
+        <div id="turn-indicator" style="color:white; margin-top:10px; font-weight:bold">دور اللاعب 1</div>
+        <div id="doubles-indicator" style="color:var(--gold); font-size: 12px; margin-top: 5px; height: 15px;"></div>
     </div>
 
 <script>
-    // مصفوفة الإحداثيات الـ 40 التي قمت بتزويدي بها
-    const centers = [
-        {x: 92.38, y: 90.85}, // خانة 0 (GO)
-        {x: 81.71, y: 93.29}, // خانة 1
-        {x: 74.09, y: 92.38}, // خانة 2
-        {x: 66.16, y: 92.38}, // خانة 3
-        {x: 58.23, y: 90.85}, // خانة 4
-        {x: 50.61, y: 91.16}, // خانة 5
-        {x: 42.68, y: 92.99}, // خانة 6
-        {x: 34.76, y: 92.68}, // خانة 7
-        {x: 25.91, y: 93.29}, // خانة 8
-        {x: 18.29, y: 93.60}, // خانة 9
-        {x: 7.62, y: 91.16},  // خانة 10
-        {x: 5.79, y: 82.01},  // خانة 11
-        {x: 7.01, y: 74.09},  // خانة 12
-        {x: 7.62, y: 65.55},  // خانة 13
-        {x: 7.62, y: 57.93},  // خانة 14
-        {x: 7.32, y: 51.52},  // خانة 15
-        {x: 7.32, y: 41.77},  // خانة 16
-        {x: 7.01, y: 32.93},  // خانة 17
-        {x: 8.23, y: 25.61},  // خانة 18
-        {x: 7.93, y: 17.07},  // خانة 19
-        {x: 6.71, y: 7.32},   // خانة 20
-        {x: 18.29, y: 6.71},  // خانة 21
-        {x: 26.52, y: 8.54},  // خانة 22
-        {x: 33.84, y: 7.93},  // خانة 23
-        {x: 42.99, y: 7.93},  // خانة 24
-        {x: 49.39, y: 6.71},  // خانة 25
-        {x: 59.15, y: 6.40},  // خانة 26
-        {x: 66.46, y: 7.32},  // خانة 27
-        {x: 74.70, y: 8.23},  // خانة 28
-        {x: 80.79, y: 6.71},  // خانة 29
-        {x: 93.60, y: 8.54},  // خانة 30
-        {x: 93.90, y: 17.68}, // خانة 31
-        {x: 93.90, y: 25.30}, // خانة 32
-        {x: 93.60, y: 33.23}, // خانة 33
-        {x: 93.29, y: 42.07}, // خانة 34
-        {x: 92.68, y: 50.61}, // خانة 35
-        {x: 92.68, y: 57.32}, // خانة 36
-        {x: 92.68, y: 65.55}, // خانة 37
-        {x: 92.99, y: 73.17}, // خانة 38
-        {x: 92.07, y: 82.01}  // خانة 39
+    const diceSound = new Audio('https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/Nerdat.mp3');
+
+    document.addEventListener('touchstart', function(event) {
+        if (event.touches.length > 1) event.preventDefault();
+    }, { passive: false });
+
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(event) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) event.preventDefault();
+        lastTouchEnd = now;
+    }, false);
+
+    const propertyData = {
+        0: { name: "البداية", type: "special", desc: "اقبض 200$ عند المرور" },
+        1: { name: "طريق أولد كينت", price: 60, rent: 2, h1: 10, h2: 30, h3: 90, h4: 160, hotel: 250, build: 50, color: "#955436", owner: null },
+        2: { name: "صندوق الجماعة", type: "community" },
+        3: { name: "طريق وايت تشابل", price: 60, rent: 4, h1: 20, h2: 60, h3: 180, h4: 320, hotel: 450, build: 50, color: "#955436", owner: null },
+        4: { name: "ضريبة الدخل", type: "tax", amount: 200 },
+        5: { name: "محطة كينغز كروس", price: 200, rent: 25, type: "station", color: "#333", owner: null },
+        6: { name: "شارع أنجيل", price: 100, rent: 6, h1: 30, h2: 90, h3: 270, h4: 400, hotel: 550, build: 50, color: "#bae2e8", owner: null },
+        7: { name: "فرصة", type: "chance" },
+        8: { name: "شارع يوستون", price: 100, rent: 6, h1: 30, h2: 90, h3: 270, h4: 400, hotel: 550, build: 50, color: "#bae2e8", owner: null },
+        9: { name: "طريق بنتونفيل", price: 120, rent: 8, h1: 40, h2: 100, h3: 300, h4: 450, hotel: 600, build: 50, color: "#bae2e8", owner: null },
+        10: { name: "السجن", type: "special", desc: "زيارة فقط" },
+        11: { name: "بال مال", price: 140, rent: 10, h1: 50, h2: 150, h3: 450, h4: 625, hotel: 750, build: 100, color: "#d93a96", owner: null },
+        12: { name: "شركة الكهرباء", price: 150, type: "utility", desc: "ادفع ثمن الاستهلاك" },
+        13: { name: "شارع وايتهول", price: 140, rent: 10, h1: 50, h2: 150, h3: 450, h4: 625, hotel: 750, build: 100, color: "#d93a96", owner: null },
+        14: { name: "شارع نورثمبرلاند", price: 160, rent: 12, h1: 60, h2: 180, h3: 500, h4: 700, hotel: 900, build: 100, color: "#d93a96", owner: null },
+        15: { name: "محطة ماريليبون", price: 200, rent: 25, type: "station", color: "#333", owner: null },
+        16: { name: "شارع بودو", price: 180, rent: 14, h1: 70, h2: 200, h3: 550, h4: 750, hotel: 950, build: 100, color: "#f7941d", owner: null },
+        17: { name: "صندوق الجماعة", type: "community" },
+        18: { name: "شارع مارلبورو", price: 180, rent: 14, h1: 70, h2: 200, h3: 550, h4: 750, hotel: 950, build: 100, color: "#f7941d", owner: null },
+        19: { name: "شارع فاين", price: 200, rent: 16, h1: 80, h2: 220, h3: 600, h4: 800, hotel: 1000, build: 100, color: "#f7941d", owner: null },
+        20: { name: "موقف مجاني", type: "special", desc: "استرح هنا قليلاً" },
+        21: { name: "ذا ستراند", price: 220, rent: 18, h1: 90, h2: 250, h3: 700, h4: 875, hotel: 1050, build: 150, color: "#ed1c24", owner: null },
+        22: { name: "فرصة", type: "chance" },
+        23: { name: "شارع فليت", price: 220, rent: 18, h1: 90, h2: 250, h3: 700, h4: 875, hotel: 1050, build: 150, color: "#ed1c24", owner: null },
+        24: { name: "شارع ترافلجار", price: 240, rent: 20, h1: 100, h2: 300, h3: 750, h4: 925, hotel: 1100, build: 150, color: "#ed1c24", owner: null },
+        25: { name: "محطة فينتشرش", price: 200, rent: 25, type: "station", color: "#333", owner: null },
+        26: { name: "ليستر سكوير", price: 260, rent: 22, h1: 110, h2: 330, h3: 800, h4: 975, hotel: 1150, build: 150, color: "#fef200", owner: null },
+        27: { name: "شارع كوفنتري", price: 260, rent: 22, h1: 110, h2: 330, h3: 800, h4: 975, hotel: 1150, build: 150, color: "#fef200", owner: null },
+        28: { name: "شركة المياه", price: 150, type: "utility", desc: "ادفع ثمن الاستهلاك" },
+        29: { name: "بيكاديللي", price: 280, rent: 24, h1: 120, h2: 360, h3: 850, h4: 1025, hotel: 1200, build: 150, color: "#fef200", owner: null },
+        30: { name: "اذهب إلى السجن", type: "go_to_jail" },
+        31: { name: "شارع ريجنت", price: 300, rent: 26, h1: 130, h2: 390, h3: 900, h4: 1100, hotel: 1275, build: 200, color: "#1fb25a", owner: null },
+        32: { name: "شارع أكسفورد", price: 300, rent: 26, h1: 130, h2: 390, h3: 900, h4: 1100, hotel: 1275, build: 200, color: "#1fb25a", owner: null },
+        33: { name: "صندوق الجماعة", type: "community" },
+        34: { name: "شارع بوند", price: 320, rent: 28, h1: 150, h2: 450, h3: 1000, h4: 1200, hotel: 1400, build: 200, color: "#1fb25a", owner: null },
+        35: { name: "محطة ليفربول", price: 200, rent: 25, type: "station", color: "#333", owner: null },
+        36: { name: "فرصة", type: "chance" },
+        37: { name: "بارك لين", price: 350, rent: 35, h1: 175, h2: 500, h3: 1100, h4: 1300, hotel: 1500, build: 200, color: "#0072bb", owner: null },
+        38: { name: "ضريبة الرفاهية", type: "tax", amount: 100 },
+        39: { name: "ماي فير", price: 400, rent: 50, h1: 200, h2: 600, h3: 1400, h4: 1700, hotel: 2000, build: 200, color: "#0072bb", owner: null }
+    };
+
+    const chanceCards = [
+        { text: "تقدم إلى ميدان 'البداية' (GO).", action: (p) => { p.pos = 0; p.balance += 200; } },
+        { text: "أخطأت في الحسابات، ادفع ضريبة 50$.", action: (p) => { p.balance -= 50; } },
+        { text: "البنك يدفع لك أرباحاً قدرها 150$.", action: (p) => { p.balance += 150; } },
+        { text: "تقدم إلى 'ماي فير'.", action: (p) => { p.pos = 39; } },
+        { text: "اذهب إلى السجن مباشرة!", action: (p) => { sendToJail(p); } },
+        { text: "لقد فزت بجائزة اليانصيب، خذ 100$.", action: (p) => { p.balance += 100; } }
     ];
 
-    const pawn = document.getElementById('player-pawn');
+    const communityCards = [
+        { text: "موعد الطبيب، ادفع 50$.", action: (p) => { p.balance -= 50; } },
+        { text: "بعت بعض الأسهم، خذ 25$.", action: (p) => { p.balance += 25; } },
+        { text: "إرجاع ضريبة الدخل، خذ 100$.", action: (p) => { p.balance += 100; } },
+        { text: "صندوق التأمين ينتهي مفعوله، خذ 100$.", action: (p) => { p.balance += 100; } },
+        { text: "غرامة سرعة، ادفع 15$.", action: (p) => { p.balance -= 15; } },
+        { text: "منفعة عامة، خذ 200$.", action: (p) => { p.balance += 200; } }
+    ];
 
-    // وظيفة لتحديث موقع البيدق برمجياً
-    function setPawnPosition(index) {
-        if (index >= 0 && index < centers.length) {
-            pawn.style.left = centers[index].x + "%";
-            pawn.style.top = centers[index].y + "%";
+    const centers = [
+        {x: 92.38, y: 90.85}, {x: 81.71, y: 93.29}, {x: 74.09, y: 92.38}, {x: 66.16, y: 92.38},
+        {x: 58.23, y: 90.85}, {x: 50.61, y: 91.16}, {x: 42.68, y: 92.99}, {x: 34.76, y: 92.68},
+        {x: 25.91, y: 93.29}, {x: 18.29, y: 93.60}, {x: 7.62, y: 91.16},  {x: 5.79, y: 82.01},
+        {x: 7.01, y: 74.09},  {x: 7.62, y: 65.55},  {x: 7.62, y: 57.93},  {x: 7.32, y: 51.52},
+        {x: 7.32, y: 41.77},  {x: 7.01, y: 32.93},  {x: 8.23, y: 25.61},  {x: 7.93, y: 17.07},
+        {x: 6.71, y: 7.32},   {x: 18.29, y: 6.71},  {x: 26.52, y: 8.54},  {x: 33.84, y: 7.93},
+        {x: 42.99, y: 7.93},  {x: 49.39, y: 6.71},  {x: 59.15, y: 6.40},  {x: 66.46, y: 7.32},
+        {x: 74.70, y: 8.23},  {x: 80.79, y: 6.71},  {x: 93.60, y: 8.54},  {x: 93.90, y: 17.68},
+        {x: 93.90, y: 25.30}, {x: 93.60, y: 33.23}, {x: 93.29, y: 42.07}, {x: 92.68, y: 50.61},
+        {x: 92.68, y: 57.32}, {x: 92.68, y: 65.55}, {x: 92.99, y: 73.17}, {x: 92.07, y: 82.01}
+    ];
+
+    let players = [
+        { id: 1, pos: 0, balance: 1500, color: 'var(--p1-color)', element: document.getElementById('pawn-1'), profile: document.getElementById('profile-1'), timerBar: document.getElementById('timer-1'), offset: {x: -0.6, y: -0.6}, doublesCount: 0, inJail: false, jailTurns: 0 },
+        { id: 2, pos: 0, balance: 1500, color: 'var(--p2-color)', element: document.getElementById('pawn-2'), profile: document.getElementById('profile-2'), timerBar: document.getElementById('timer-2'), offset: {x: 0.6, y: 0.6}, doublesCount: 0, inJail: false, jailTurns: 0 }
+    ];
+
+    let currentPlayerIndex = 0;
+    let isMoving = false;
+    let timeLeft = 15;
+    let timerInterval;
+    let lastRollWasDouble = false;
+    let lastDiceSum = 0;
+
+    function enableRollBtn() {
+        document.getElementById('roll-btn').disabled = false;
+    }
+
+    function disableRollBtn() {
+        document.getElementById('roll-btn').disabled = true;
+    }
+
+    function updateBalances() {
+        players.forEach(p => {
+            document.getElementById(`balance-${p.id}`).innerText = `$${p.balance}`;
+        });
+    }
+
+    function setPawnPosition(player) {
+        const coords = centers[player.pos];
+        player.element.style.left = (coords.x + player.offset.x) + "%";
+        player.element.style.top = (coords.y + player.offset.y) + "%";
+    }
+
+    function hideCard() {
+        document.getElementById('property-card').classList.remove('show');
+    }
+
+    function hideCardAndSwitch() {
+        hideCard();
+        setTimeout(() => { 
+            if(!isMoving) {
+                if(lastRollWasDouble && !players[currentPlayerIndex].inJail) {
+                    startTimer();
+                    enableRollBtn();
+                } else {
+                    switchTurn();
+                }
+            }
+        }, 500);
+    }
+
+    function actionBuy() {
+        const player = players[currentPlayerIndex];
+        const data = propertyData[player.pos];
+        if (player.balance >= data.price) {
+            player.balance -= data.price;
+            data.owner = player.id;
+            updateBalances();
+            addOwnerTag(player.pos, player.color);
+            alert(`تم شراء ${data.name} بنجاح!`);
+            hideCard();
+            if (!lastRollWasDouble) switchTurn();
+            else { startTimer(); enableRollBtn(); }
+        } else {
+            alert("لا تملك رصيد كافٍ!");
         }
     }
 
-    // افتراضياً يوضع البيدق على خانة GO عند التحميل
-    window.onload = () => setPawnPosition(0);
+    function addOwnerTag(pos, color) {
+        const board = document.getElementById('main-board');
+        const tag = document.createElement('div');
+        tag.className = 'owner-tag';
+        tag.style.left = centers[pos].x + "%";
+        tag.style.top = (centers[pos].y - 3) + "%";
+        tag.style.backgroundColor = color;
+        tag.innerText = "مملوكة";
+        board.appendChild(tag);
+    }
+
+    function executeSpecialCard(type) {
+        const cardArray = type === 'chance' ? chanceCards : communityCards;
+        const randomCard = cardArray[Math.floor(Math.random() * cardArray.length)];
+        document.getElementById('card-body').innerHTML = `<p style="font-size:18px; line-height:1.5;">${randomCard.text}</p>`;
+        document.getElementById('card-actions').innerHTML = `<button class="btn-action" onclick="applyEffect('${type}', ${cardArray.indexOf(randomCard)})">موافق</button>`;
+    }
+
+    function applyEffect(type, index) {
+        const player = players[currentPlayerIndex];
+        const cardArray = type === 'chance' ? chanceCards : communityCards;
+        const card = cardArray[index];
+        card.action(player);
+        updateBalances();
+        setPawnPosition(player);
+        hideCard();
+        
+        if (player.inJail) {
+            switchTurn();
+        } else {
+            if (!lastRollWasDouble) switchTurn();
+            else { startTimer(); enableRollBtn(); }
+        }
+    }
+
+    function sendToJail(player) {
+        player.pos = 10;
+        player.inJail = true;
+        player.jailTurns = 0;
+        player.doublesCount = 0;
+        setPawnPosition(player);
+        alert("لقد تم إرسالك إلى السجن!");
+        disableRollBtn();
+    }
+
+    function payJailFine() {
+        const player = players[currentPlayerIndex];
+        if (player.balance >= 50) {
+            player.balance -= 50;
+            player.inJail = false;
+            player.jailTurns = 0;
+            updateBalances();
+            alert("دفعت 50$ وخرجت من السجن! يمكنك اللعب في الدور القادم.");
+            hideCard();
+            switchTurn();
+        } else {
+            alert("لا تملك 50$ لدفع الغرامة!");
+        }
+    }
+
+    function checkFullSet(color, ownerId) {
+        if (!color || color === "#333") return false; 
+        const propertiesOfSameColor = Object.values(propertyData).filter(p => p.color === color);
+        return propertiesOfSameColor.every(p => p.owner === ownerId);
+    }
+
+    function showPropertyCard(pos) {
+        const data = propertyData[pos];
+        const card = document.getElementById('property-card');
+        const banner = document.getElementById('card-color');
+        const actions = document.getElementById('card-actions');
+        const player = players[currentPlayerIndex];
+        
+        if (!data) { 
+            if (!lastRollWasDouble) switchTurn(); 
+            else { startTimer(); enableRollBtn(); }
+            return; 
+        }
+        
+        startTimer(); 
+
+        if (data.type === 'go_to_jail') {
+            banner.style.backgroundColor = "#000";
+            banner.innerText = "الشرطة";
+            document.getElementById('card-name').innerText = "اذهب إلى السجن!";
+            document.getElementById('card-body').innerHTML = `<p>انتقل مباشرة إلى السجن، لا تمر بنقطة البداية ولا تقبض 200$.</p>`;
+            actions.innerHTML = `<button class="btn-action" onclick="confirmJail()">موافق</button>`;
+        } else if (data.type === 'tax') {
+            banner.style.backgroundColor = "#2c3e50";
+            banner.innerText = "وزارة المالية";
+            document.getElementById('card-name').innerText = data.name;
+            document.getElementById('card-body').innerHTML = `
+                <p style="font-size:18px; color:#e74c3c; font-weight:bold;">
+                    تم فرض ضريبة للحكومة!<br>القيمة: $${data.amount}
+                </p>
+            `;
+            player.balance -= data.amount;
+            updateBalances();
+            actions.innerHTML = `<button class="btn-action" onclick="finishAction()">دفع الضريبة</button>`;
+        } else if (data.type === 'chance' || data.type === 'community') {
+            banner.style.backgroundColor = data.type === 'chance' ? 'var(--chance-orange)' : 'var(--community-blue)';
+            banner.innerText = data.type === 'chance' ? 'فرصة' : 'صندوق الجماعة';
+            document.getElementById('card-name').innerText = "اسحب بطاقة";
+            executeSpecialCard(data.type);
+        } else if (data.type === 'special') {
+            banner.style.backgroundColor = "#333";
+            banner.innerText = "منطقة خاصة";
+            document.getElementById('card-name').innerText = data.name;
+            document.getElementById('card-body').innerHTML = `<p>${data.desc}</p>`;
+            actions.innerHTML = `<button class="btn-action" onclick="finishAction()">موافق</button>`;
+        } else {
+            if (data.owner && data.owner !== player.id) {
+                const ownerPlayer = players.find(p => p.id === data.owner);
+                let finalRent = data.rent;
+                let rentMessage = "";
+
+                if (data.type === 'station') {
+                    const stationsOwned = Object.values(propertyData).filter(p => p.type === 'station' && p.owner === data.owner).length;
+                    finalRent = 25 * Math.pow(2, stationsOwned - 1);
+                    rentMessage = `<p style="color:#e74c3c; font-weight:bold;">المالك يمتلك ${stationsOwned} محطات.<br>الإيجار المطلوب: $${finalRent}</p>`;
+                } 
+                else if (data.type === 'utility') {
+                    const utilitiesOwned = Object.values(propertyData).filter(p => p.type === 'utility' && p.owner === data.owner).length;
+                    const multiplier = utilitiesOwned === 2 ? 10 : 4;
+                    finalRent = lastDiceSum * multiplier;
+                    rentMessage = `<p style="color:#e74c3c; font-weight:bold;">المالك يمتلك ${utilitiesOwned} من الخدمات.<br>الإيجار (${multiplier} × مجموع النرد): $${finalRent}</p>`;
+                }
+                else {
+                    let isFullSet = checkFullSet(data.color, data.owner);
+                    if (isFullSet) finalRent = data.rent * 2;
+                    rentMessage = `<p style="color:#e74c3c; font-weight:bold;">هذه الأرض مملوكة لـ لاعب ${ownerPlayer.id}!<br>`;
+                    if (isFullSet) rentMessage += `إيجار مضاعف ($${finalRent}) لامتلاك كامل المجموعة!</p>`;
+                    else rentMessage += `لقد دفعت إيجاراً قيمته $${finalRent}</p>`;
+                }
+
+                player.balance -= finalRent;
+                ownerPlayer.balance += finalRent;
+                updateBalances();
+                
+                banner.style.backgroundColor = "#e74c3c";
+                banner.innerText = "دفع إيجار";
+                document.getElementById('card-name').innerText = data.name;
+                document.getElementById('card-body').innerHTML = rentMessage;
+                actions.innerHTML = `<button class="btn-action" onclick="finishAction()">متابعة</button>`;
+            } else {
+                banner.style.backgroundColor = data.color || '#333';
+                banner.innerText = data.owner === player.id ? "ملكيتك" : "سند ملكية";
+                document.getElementById('card-name').innerText = data.name;
+                
+                if (data.type === 'station') {
+                    document.getElementById('card-body').innerHTML = `
+                        <div class="rent-row"><span>إيجار محطة واحدة</span> <span>$25</span></div>
+                        <div class="rent-row"><span>إيجار محطتين</span> <span>$50</span></div>
+                        <div class="rent-row"><span>إيجار 3 محطات</span> <span>$100</span></div>
+                        <div class="rent-row"><span>إيجار 4 محطات</span> <span>$200</span></div>
+                        <div style="font-size: 11px; color: #7f8c8d; margin-top: 10px;">سعر الشراء: <b>$200</b></div>
+                    `;
+                } else if (data.type === 'utility') {
+                    document.getElementById('card-body').innerHTML = `
+                        <p style="font-size:12px;">إذا كان اللاعب يمتلك مرفقاً واحداً، الإيجار 4 أضعاف النرد.</p>
+                        <p style="font-size:12px;">إذا كان يمتلك المرفقين، الإيجار 10 أضعاف النرد.</p>
+                        <div style="font-size: 11px; color: #7f8c8d; margin-top: 10px;">سعر الشراء: <b>$150</b></div>
+                    `;
+                } else {
+                    document.getElementById('card-body').innerHTML = `
+                        <div class="rent-row main"><span>الإيجار</span> <span>$${data.rent}</span></div>
+                        <div class="rent-row"><span>مع بيت واحد</span> <span>$${data.h1}</span></div>
+                        <div class="rent-row"><span>مع بيتين</span> <span>$${data.h2}</span></div>
+                        <div class="rent-row"><span>مع 3 بيوت</span> <span>$${data.h3}</span></div>
+                        <div class="rent-row"><span>مع 4 بيوت</span> <span>$${data.h4}</span></div>
+                        <div class="rent-row main"><span>مع فندق</span> <span>$${data.hotel}</span></div>
+                        <div style="font-size: 11px; color: #7f8c8d; margin-top: 10px;">
+                            تكلفة بناء البيت $${data.build}<br>
+                            سعر الشراء: <b>$${data.price}</b>
+                        </div>
+                    `;
+                }
+
+                if (data.owner === player.id) {
+                    actions.innerHTML = `<button class="btn-action" onclick="finishAction()">أنت المالك</button>`;
+                } else {
+                    actions.innerHTML = `
+                        <button class="btn-buy" onclick="actionBuy()">شراء</button>
+                        <button class="btn-cancel" onclick="finishAction()">إلغاء</button>
+                    `;
+                }
+            }
+        }
+        card.classList.add('show');
+    }
+
+    function confirmJail() {
+        sendToJail(players[currentPlayerIndex]);
+        hideCard();
+        switchTurn();
+    }
+
+    function finishAction() {
+        hideCard();
+        if (!lastRollWasDouble) switchTurn();
+        else { startTimer(); enableRollBtn(); }
+    }
+
+    async function handleRoll() {
+        if (isMoving || document.getElementById('roll-btn').disabled) return;
+        
+        disableRollBtn();
+        let player = players[currentPlayerIndex];
+
+        diceSound.currentTime = 0;
+        diceSound.play().catch(e => console.log("Audio play error:", e));
+
+        if (player.inJail) {
+            clearInterval(timerInterval);
+            const d1 = Math.floor(Math.random() * 6) + 1;
+            const d2 = Math.floor(Math.random() * 6) + 1;
+            
+            document.getElementById('dice-1').innerText = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d1-1];
+            document.getElementById('dice-2').innerText = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d2-1];
+
+            if (d1 === d2) {
+                player.inJail = false;
+                player.jailTurns = 0;
+                document.getElementById('doubles-indicator').innerText = "رمية مزدوجة! اخرج من السجن وتحرك";
+                lastDiceSum = d1 + d2;
+                movePawn(lastDiceSum);
+            } else {
+                player.jailTurns++;
+                if (player.jailTurns >= 3) {
+                    alert("لقد قضيت 3 أدوار! يجب دفع 50$ للخروج.");
+                    showJailOptions();
+                } else {
+                    alert(`لم تحصل على رمية مزدوجة. المحاولة ${player.jailTurns} من 3`);
+                    switchTurn();
+                }
+            }
+            return;
+        }
+
+        isMoving = true;
+        clearInterval(timerInterval);
+        hideCard();
+        document.getElementById('doubles-indicator').innerText = "";
+
+        const d1Ele = document.getElementById('dice-1');
+        const d2Ele = document.getElementById('dice-2');
+        d1Ele.classList.add('rolling');
+        d2Ele.classList.add('rolling');
+
+        await new Promise(r => setTimeout(r, 800));
+
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+        lastDiceSum = d1 + d2;
+        const diceIcons = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        d1Ele.innerText = diceIcons[d1-1];
+        d2Ele.innerText = diceIcons[d2-1];
+        d1Ele.classList.remove('rolling');
+        d2Ele.classList.remove('rolling');
+
+        if (d1 === d2) {
+            player.doublesCount++;
+            lastRollWasDouble = true;
+            if (player.doublesCount === 3) {
+                document.getElementById('doubles-indicator').innerText = "سرعة زائدة! اذهب للسجن";
+                sendToJail(player);
+                isMoving = false;
+                setTimeout(switchTurn, 1000);
+                return;
+            } else {
+                document.getElementById('doubles-indicator').innerText = `رمية مزدوجة! العب مرة أخرى (${player.doublesCount})`;
+            }
+        } else {
+            player.doublesCount = 0;
+            lastRollWasDouble = false;
+        }
+
+        movePawn(lastDiceSum);
+    }
+
+    async function movePawn(steps) {
+        isMoving = true;
+        let player = players[currentPlayerIndex];
+        player.element.classList.add('moving');
+
+        for (let i = 0; i < steps; i++) {
+            player.pos = (player.pos + 1) % 40;
+            setPawnPosition(player);
+            if (player.pos === 0) {
+                player.balance += 200;
+                updateBalances();
+            }
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        player.element.classList.remove('moving');
+        isMoving = false;
+        showPropertyCard(player.pos);
+    }
+
+    function showJailOptions() {
+        const card = document.getElementById('property-card');
+        const banner = document.getElementById('card-color');
+        const actions = document.getElementById('card-actions');
+        
+        banner.style.backgroundColor = "#000";
+        banner.innerText = "قوانين السجن";
+        document.getElementById('card-name').innerText = "خروج إجباري";
+        document.getElementById('card-body').innerHTML = `<p>يجب دفع 50$ غرامة للخروج بعد 3 محاولات فاشلة.</p>`;
+        actions.innerHTML = `<button class="btn-buy" onclick="payJailFine()">دفع 50$</button>`;
+        card.classList.add('show');
+    }
+
+    function switchTurn() {
+        players[currentPlayerIndex].profile.classList.remove('active');
+        players[currentPlayerIndex].timerBar.style.width = "100%";
+        
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+        
+        players[currentPlayerIndex].profile.classList.add('active');
+        document.getElementById('turn-indicator').innerText = `دور اللاعب ${players[currentPlayerIndex].id}`;
+        document.getElementById('doubles-indicator').innerText = "";
+        lastRollWasDouble = false;
+        enableRollBtn();
+        startTimer();
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timeLeft = 15;
+        timerInterval = setInterval(() => {
+            if (isMoving) return;
+            
+            timeLeft--;
+            const p = players[currentPlayerIndex];
+            p.timerBar.style.width = (timeLeft / 15 * 100) + "%";
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                if (document.getElementById('property-card').classList.contains('show')) {
+                    hideCard();
+                    setTimeout(switchTurn, 500);
+                } else {
+                    switchTurn();
+                }
+            }
+        }, 1000);
+    }
+
+    window.onload = () => {
+        players.forEach(setPawnPosition);
+        enableRollBtn();
+        startTimer();
+    };
 </script>
 
 </body>
