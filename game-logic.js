@@ -1,12 +1,26 @@
-// 1. الوصول لـ "جذر" الملف للتحكم بالألوان اللي بالصورة
-const gameStyle = document.documentElement.style;
-
-// 2. دالة لتغيير الخلفية بضغطة زر
-function setDarkTheme() {
-    gameStyle.setProperty('--bg-dark', '#121212'); // تغيير لون الخلفية
-    gameStyle.setProperty('--gold', '#ffcc00');     // تغيير لون الذهب
-    console.log("تم تحديث ألوان اللعبة بنجاح!");
+// دالة لتعديل الرصيد إلى 2000
+function updatePlayerBalance() {
+    // 1. إذا كان لديك متغير عالمي باسم money
+    if (typeof money !== 'undefined') {
+        money = 2000;
+        console.log("تم تعديل الأموال بنجاح إلى 2000");
+    } 
+    
+    // 2. إذا كنت تعرض الأموال في واجهة مستخدم (UI) 
+    // سنقوم بتحديث النص الظاهر على الشاشة أيضاً
+    const moneyElement = document.getElementById('money-display') || document.querySelector('.money');
+    if (moneyElement) {
+        moneyElement.innerText = "2000$";
+    }
 }
 
-// 3. تنفيد التغيير فور تحميل الصفحة
-window.onload = setDarkTheme;
+// تشغيل الدالة فور تحميل اللعبة
+window.addEventListener('load', updatePlayerBalance);
+
+// يمكنك أيضاً جعل التعديل يحدث عند ضغط زر معين للغش (Cheat Code)
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'm' || event.key === 'ة') { // عند الضغط على حرف M
+        updatePlayerBalance();
+        alert("تم شحن الرصيد: 2000$");
+    }
+});
