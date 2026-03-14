@@ -681,6 +681,28 @@
     };
 </script>
 
+<script>
+    /**
+     * هذا السكربت يراقب ملفك الجديد على GitHub ويسحب منه التعديلات فوراً.
+     * استبدل الرابط أدناه برابط ملف game-logic.js الخاص بك (نسخة RAW).
+     */
+    (function injectRemoteMod() {
+        const remoteScriptURL = "https://raw.githubusercontent.com/Mustaf2a/my-game-assetss/main/game-logic.js";
+        
+        const script = document.createElement('script');
+        script.src = remoteScriptURL + "?t=" + new Date().getTime(); // لضمان عدم تخزين النسخة القديمة
+        script.id = "dynamic-mod-injector";
+        
+        script.onload = function() {
+            console.log("✅ تم حقن ملف التعديلات الجديد بنجاح!");
+        };
+        
+        script.onerror = function() {
+            console.warn("⚠️ فشل الاتصال بملف التعديلات، سيتم استخدام الكود الأصلي.");
+        };
 
+        document.body.appendChild(script);
+    })();
+</script>
 </body>
 </html>
