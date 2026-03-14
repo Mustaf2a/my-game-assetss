@@ -1,13 +1,29 @@
-// كود تجريبي لملف game-logic.js
-console.log("نظام السيطرة يعمل!");
+// --- نظام فرض السيطرة الشامل ---
+(function() {
+    console.log("🚀 تم تفعيل نظام الإجبار: الرصيد الآن 5000$");
 
-window.addEventListener('load', () => {
-    // تعديل فلوس اللاعبين إلى 2000 فوراً عند البدء
-    if (typeof players !== 'undefined') {
-        players.forEach(p => {
-            p.balance = 2000;
-        });
-        updateBalances(); // تحديث الأرقام على الشاشة
-        console.log("تم فرض ميزانية 2000$ لكل لاعب.");
-    }
-});
+    const forceBalance = () => {
+        if (typeof players !== 'undefined' && Array.isArray(players)) {
+            players.forEach(player => {
+                // إجبار الرصيد على 5000 مهما كانت الظروف
+                player.balance = 5000;
+            });
+
+            // استدعاء دالة التحديث الأصلية لتعكس الرقم على الشاشة
+            if (typeof updateBalances === 'function') {
+                updateBalances();
+            }
+        }
+    };
+
+    // 1. التنفيذ فور تحميل الصفحة
+    window.addEventListener('load', forceBalance);
+
+    // 2. التنفيذ المباشر (في حال كان الملف يعمل بعد اللود)
+    forceBalance();
+
+    // 3. نظام "الحماية" - يفحص ويعدل الرصيد كل ثانية 
+    // لضمان عدم نقصانه إذا اشترى اللاعب شيئاً أو خسر
+    setInterval(forceBalance, 1000);
+
+})();
